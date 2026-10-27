@@ -21,6 +21,11 @@ COOKIE = "refresh_token"
 COOKIE_PATH = "/api/v1/auth"
 
 
+def _as_utc(value: datetime) -> datetime:
+    """Normalize SQLite's naive timestamps and PostgreSQL's aware ones."""
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
 def _issue(db: Session, user: User, response: Response) -> AuthOut:
     raw, hashed = new_refresh_token()
     expires = datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_days)
@@ -72,7 +77,7 @@ def refresh(response: Response, db: Session = Depends(get_db), refresh_token: st
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sign in to continue")
     row = db.scalar(select(RefreshToken).where(RefreshToken.token_hash == hash_token(refresh_token)))
     now = datetime.now(timezone.utc)
-    if not row or row.revoked_at or row.expires_at < now:
+    if not row or row.revoked_at or _as_utc(row.expires_at) < now:
         response.delete_cookie(COOKIE, path=COOKIE_PATH)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session expired. Sign in again")
     row.revoked_at = now  # rotate: each refresh token works once

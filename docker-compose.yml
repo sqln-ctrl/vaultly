@@ -1,28 +1,11 @@
 services:
-  db:
-    image: pgvector/pgvector:pg16
-    environment:
-      POSTGRES_USER: vaultly
-      POSTGRES_PASSWORD: vaultly
-      POSTGRES_DB: vaultly
-    ports: ["5432:5432"]
-    volumes: [pgdata:/var/lib/postgresql/data]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U vaultly"]
-      interval: 5s
-      retries: 10
-  redis:
-    image: redis:7-alpine
-    ports: ["6379:6379"]
   api:
     build: ./backend
     env_file: ./backend/.env
     environment:
-      DATABASE_URL: postgresql+psycopg://vaultly:vaultly@db:5432/vaultly
-    depends_on:
-      db: { condition: service_healthy }
+      DATABASE_URL: sqlite:////data/vaultly.db
     ports: ["8000:8000"]
-    volumes: ["./backend:/app"]
+    volumes: ["./backend:/app", "sqlite_data:/data"]
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 volumes:
-  pgdata:
+  sqlite_data:

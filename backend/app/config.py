@@ -4,7 +4,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    database_url: str = "postgresql+psycopg://vaultly:vaultly@localhost:5432/vaultly"
+    # SQLite is the default for local development. Set DATABASE_URL to a
+    # PostgreSQL/Supabase connection string when deploying.
+    database_url: str = "sqlite:///./vaultly.db"
     secret_key: str = "dev-only-change-me"
     access_token_minutes: int = 15
     refresh_token_days: int = 14

@@ -5,7 +5,6 @@ Revises:
 """
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects.postgresql import UUID
 
 revision = "0001"
 down_revision = None
@@ -14,10 +13,13 @@ depends_on = None
 
 
 def upgrade():
-    op.execute("CREATE EXTENSION IF NOT EXISTS vector")  # used from Phase 3 (embeddings)
+    # pgvector is only available on PostgreSQL. SQLite is used for local
+    # development until the application moves to PostgreSQL/Supabase.
+    if op.get_bind().dialect.name == "postgresql":
+        op.execute("CREATE EXTENSION IF NOT EXISTS vector")  # used from Phase 3 (embeddings)
     op.create_table(
         "users",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", sa.Uuid(as_uuid=True), primary_key=True),
         sa.Column("email", sa.String(320), nullable=False),
         sa.Column("password_hash", sa.String(255), nullable=False),
         sa.Column("full_name", sa.String(120), nullable=False),
@@ -29,8 +31,8 @@ def upgrade():
     op.create_index("ix_users_email", "users", ["email"], unique=True)
     op.create_table(
         "refresh_tokens",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True),
-        sa.Column("user_id", UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("id", sa.Uuid(as_uuid=True), primary_key=True),
+        sa.Column("user_id", sa.Uuid(as_uuid=True), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
         sa.Column("token_hash", sa.String(64), nullable=False, unique=True),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("revoked_at", sa.DateTime(timezone=True)),

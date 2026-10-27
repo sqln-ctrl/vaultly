@@ -4,3 +4,5 @@ node_modules/
 dist/
 .venv/
 *.tsbuildinfo
+backend/*.db
+backend/*.db-*
