@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     reset_token_minutes: int = 30
     frontend_url: str = "http://localhost:5173"
     cookie_secure: bool = False
+    storage_dir: str = "./data/documents"
 
 
 settings = Settings()

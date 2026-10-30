@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -41,3 +42,46 @@ class UserOut(BaseModel):
 class AuthOut(BaseModel):
     access_token: str
     user: UserOut
+
+
+class DocumentFieldOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    vendor: str | None = None
+    doc_number: str | None = None
+    issue_date: datetime | None = None
+    due_date: datetime | None = None
+    expiry_date: datetime | None = None
+    total_amount: float | None = None
+    tax_amount: float | None = None
+    currency: str | None = None
+    user_verified: bool = False
+
+
+class DocumentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    original_filename: str
+    mime_type: str
+    size_bytes: int
+    sha256: str
+    page_count: int | None
+    category: str
+    status: str
+    error_message: str | None = None
+    summary: str | None = None
+    uploaded_at: datetime
+    processed_at: datetime | None = None
+    fields: DocumentFieldOut | None = None
+
+
+class DocumentRenameIn(BaseModel):
+    filename: str = Field(min_length=1, max_length=255)
+
+
+class UsageOut(BaseModel):
+    documents: int
+    document_limit: int
+    bytes: int
+    byte_limit: int
