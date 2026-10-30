@@ -2,6 +2,7 @@
 import uuid
 import logging
 import base64
+import fitz
 from sqlalchemy import select
 
 from fastapi.testclient import TestClient
@@ -90,3 +91,31 @@ def test_document_upload_duplicate_and_delete():
     assert signed.status_code == 200
     assert signed.json()["url"].startswith("/api/v1/documents/")
     assert client.delete(f"/api/v1/documents/{document_id}", headers=headers).status_code == 204
+
+
+def test_pdf_upload_and_page_limit():
+    email = f"pdf-{uuid.uuid4()}@example.com"
+    assert client.post("/api/v1/auth/register", json={
+        "email": email, "password": "password123", "full_name": "PDF Smoke",
+    }).status_code == 201
+    db = SessionLocal()
+    user = db.scalar(select(User).where(User.email == email))
+    user.email_verified = True
+    db.commit()
+    db.close()
+
+    login = client.post("/api/v1/auth/login", json={"email": email, "password": "password123"})
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    pdf = fitz.open()
+    pdf.new_page()
+    pdf_bytes = pdf.tobytes()
+    pdf.close()
+
+    uploaded = client.post(
+        "/api/v1/documents",
+        headers=headers,
+        files={"file": ("invoice.pdf", pdf_bytes, "application/pdf")},
+    )
+    assert uploaded.status_code == 201
+    assert uploaded.json()["mime_type"] == "application/pdf"
+    assert uploaded.json()["page_count"] == 1
