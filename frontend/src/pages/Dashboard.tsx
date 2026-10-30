@@ -10,6 +10,7 @@ export default function Dashboard() {
   const [usage, setUsage] = useState<Usage | null>(null);
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [verificationMessage, setVerificationMessage] = useState("");
 
   async function load() {
     const [items, limits] = await Promise.all([
@@ -22,6 +23,16 @@ export default function Dashboard() {
 
   useEffect(() => { if (user?.email_verified) load().catch((err) => setError((err as Error).message)); }, [user?.email_verified]);
 
+  async function resendVerification() {
+    if (!user?.email) return;
+    try {
+      await api("/auth/resend-verification", { method: "POST", json: { email: user.email } });
+      setVerificationMessage("Email delivery is disabled in development. Use the server verification link.");
+    } catch (err) {
+      setVerificationMessage((err as Error).message);
+    }
+  }
+
   async function upload(files: FileList | null) {
     if (!files?.length) return;
     setUploading(true); setError("");
@@ -31,6 +42,7 @@ export default function Dashboard() {
         form.append("file", file);
         await api<DocumentItem>("/documents", { method: "POST", body: form });
       }
+
       await load();
     } catch (err) {
       setError((err as Error).message);
@@ -48,7 +60,11 @@ export default function Dashboard() {
 
       {!user?.email_verified && (
         <p role="status" className="mt-6 rounded-md border border-brass/50 bg-brass/10 px-4 py-3 text-sm">
-          Verify your email to start uploading documents. Check your inbox for the link.
+          Verify your email to start uploading documents.
+          <button type="button" className="ml-2 font-medium text-moss underline" onClick={resendVerification}>
+            Resend verification link
+          </button>
+          {verificationMessage && <span className="mt-1 block text-ink/70">{verificationMessage}</span>}
         </p>
       )}
 
