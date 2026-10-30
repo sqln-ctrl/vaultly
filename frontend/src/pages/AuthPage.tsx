@@ -59,6 +59,11 @@ export default function AuthPage({ mode }: { mode: "login" | "register" }) {
           <button className="btn w-full" disabled={busy}>
             {busy ? "One moment…" : isLogin ? "Sign in" : "Create account"}
           </button>
+          {isLogin && (
+            <p className="text-center text-sm">
+              <Link className="font-medium text-moss underline" to="/forgot-password">Forgot password?</Link>
+            </p>
+          )}
           <p className="text-sm text-ink/70">
             {isLogin ? "New to Vaultly? " : "Already have an account? "}
             <Link className="font-medium text-moss underline" to={isLogin ? "/register" : "/login"}>

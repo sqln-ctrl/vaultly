@@ -8,8 +8,10 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import get_db
-from ..models import RefreshToken, User
-from ..schemas import AuthOut, LoginIn, RegisterIn, UserOut, VerifyIn
+from ..models import PasswordResetToken, RefreshToken, User
+from ..schemas import (
+    AuthOut, ForgotPasswordIn, LoginIn, RegisterIn, ResetPasswordIn, UserOut, VerifyIn,
+)
 from ..security import (
     create_token, decode_token, hash_password, hash_token, new_refresh_token, verify_password,
 )
@@ -93,6 +95,46 @@ def logout(response: Response, db: Session = Depends(get_db), refresh_token: str
             row.revoked_at = datetime.now(timezone.utc)
             db.commit()
     response.delete_cookie(COOKIE, path=COOKIE_PATH)
+
+
+@router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED)
+def forgot_password(body: ForgotPasswordIn, db: Session = Depends(get_db)):
+    user = db.scalar(select(User).where(User.email == body.email.lower()))
+    if user:
+        raw, hashed = new_refresh_token()
+        expires = datetime.now(timezone.utc) + timedelta(minutes=settings.reset_token_minutes)
+        db.query(PasswordResetToken).filter(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.used_at.is_(None),
+        ).update({PasswordResetToken.used_at: datetime.now(timezone.utc)})
+        db.add(PasswordResetToken(user_id=user.id, token_hash=hashed, expires_at=expires))
+        db.commit()
+        log.warning(
+            "Password reset link for %s: %s/reset-password?token=%s",
+            user.email, settings.frontend_url, raw,
+        )
+    # Always return the same response so account existence cannot be enumerated.
+    return {"message": "If an account exists for that email, a reset link has been sent"}
+
+
+@router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+def reset_password(body: ResetPasswordIn, db: Session = Depends(get_db)):
+    row = db.scalar(select(PasswordResetToken).where(
+        PasswordResetToken.token_hash == hash_token(body.token),
+    ))
+    now = datetime.now(timezone.utc)
+    if not row or row.used_at or _as_utc(row.expires_at) < now:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "This reset link is invalid or expired")
+    user = db.get(User, row.user_id)
+    if not user:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "This reset link is invalid or expired")
+    user.password_hash = hash_password(body.password)
+    row.used_at = now
+    db.query(RefreshToken).filter(
+        RefreshToken.user_id == user.id,
+        RefreshToken.revoked_at.is_(None),
+    ).update({RefreshToken.revoked_at: now})
+    db.commit()
 
 
 @router.get("/me", response_model=UserOut)

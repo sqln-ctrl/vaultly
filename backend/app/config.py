@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     access_token_minutes: int = 15
     refresh_token_days: int = 14
     verify_token_minutes: int = 60 * 24
+    reset_token_minutes: int = 30
     frontend_url: str = "http://localhost:5173"
     cookie_secure: bool = False
 

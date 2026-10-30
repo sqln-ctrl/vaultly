@@ -36,5 +36,5 @@ its SQLAlchemy URL (such as `postgresql+psycopg://...`), and run `alembic
 upgrade head`. The pgvector extension is created only on PostgreSQL.
 
 ## Phase 1 status (foundation)
-Done: SQLite local stack, Alembic, register/login/refresh (rotating, HttpOnly cookie)/logout/verify-email, React shell with protected routes.
-Next: password reset email, rate limiting, then Phase 2 (upload to private storage, document list and detail).
+Done: SQLite local stack, Alembic, register/login/refresh (rotating, HttpOnly cookie)/logout/verify-email, password reset, auth rate limiting, security response headers, React auth shell with protected routes.
+Next: Phase 2 (secure upload to private storage, document list and detail).
