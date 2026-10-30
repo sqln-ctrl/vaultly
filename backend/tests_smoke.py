@@ -1,10 +1,14 @@
 """Run against a live local database: `pytest tests_smoke.py` (after migration)."""
 import uuid
 import logging
+import base64
+from sqlalchemy import select
 
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.db import SessionLocal
+from app.models import User
 
 client = TestClient(app)
 
@@ -46,3 +50,43 @@ def test_password_reset_does_not_enumerate_accounts(caplog):
     assert client.post("/api/v1/auth/reset-password", json={
         "token": reset_link, "password": "another-password",
     }).status_code == 400
+
+
+def test_document_upload_duplicate_and_delete():
+    email = f"documents-{uuid.uuid4()}@example.com"
+    assert client.post("/api/v1/auth/register", json={
+        "email": email, "password": "password123", "full_name": "Document Smoke",
+    }).status_code == 201
+    db = SessionLocal()
+    user = db.scalar(select(User).where(User.email == email))
+    user.email_verified = True
+    db.commit()
+    db.close()
+    login = client.post("/api/v1/auth/login", json={"email": email, "password": "password123"})
+    assert login.status_code == 200
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    )
+
+    uploaded = client.post(
+        "/api/v1/documents",
+        headers=headers,
+        files={"file": ("receipt.png", png, "image/png")},
+    )
+    assert uploaded.status_code == 201
+    document_id = uploaded.json()["id"]
+
+    duplicate = client.post(
+        "/api/v1/documents",
+        headers=headers,
+        files={"file": ("copy.png", png, "image/png")},
+    )
+    assert duplicate.status_code == 409
+
+    detail = client.get(f"/api/v1/documents/{document_id}", headers=headers)
+    assert detail.status_code == 200
+    signed = client.get(f"/api/v1/documents/{document_id}/download", headers=headers)
+    assert signed.status_code == 200
+    assert signed.json()["url"].startswith("/api/v1/documents/")
+    assert client.delete(f"/api/v1/documents/{document_id}", headers=headers).status_code == 204

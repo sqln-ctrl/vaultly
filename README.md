@@ -37,4 +37,6 @@ upgrade head`. The pgvector extension is created only on PostgreSQL.
 
 ## Phase 1 status (foundation)
 Done: SQLite local stack, Alembic, register/login/refresh (rotating, HttpOnly cookie)/logout/verify-email, password reset, auth rate limiting, security response headers, React auth shell with protected routes.
-Next: Phase 2 (secure upload to private storage, document list and detail).
+Phase 2 status (documents)
+Done: private per-user document storage, content-type validation, 15 MB and 20-page limits, duplicate SHA-256 detection, usage limits, library, detail, rename, delete, and 5-minute signed downloads.
+Next: document processing and extracted fields.
