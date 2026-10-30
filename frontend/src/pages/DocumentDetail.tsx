@@ -62,35 +62,19 @@ export default function DocumentDetail() {
             <h2 className="mb-2 text-sm font-medium">Preview</h2>
             <div className="overflow-hidden rounded-md border border-line bg-ink/5">
               {document.mime_type === "application/pdf" ? (
-                <a
-                  href={previewUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title={`Open ${document.original_filename} in full size`}
-                  className="block h-40 w-40"
-                >
-                  <iframe
-                    src={previewUrl}
-                    title={`Preview of ${document.original_filename}`}
-                    className="pointer-events-none h-40 w-40 border-0"
-                    referrerPolicy="no-referrer"
-                  />
-                </a>
+                <iframe
+                  src={previewUrl}
+                  title={`Preview of ${document.original_filename}`}
+                  className="pointer-events-none h-40 w-40 border-0"
+                  referrerPolicy="no-referrer"
+                />
               ) : (
-                <a
-                  href={previewUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title={`Open ${document.original_filename} in full size`}
-                  className="block h-40 w-40"
-                >
-                  <img
-                    src={previewUrl}
-                    alt={`Preview of ${document.original_filename}`}
-                    className="h-40 w-40 object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                </a>
+                <img
+                  src={previewUrl}
+                  alt={`Preview of ${document.original_filename}`}
+                  className="pointer-events-none h-40 w-40 object-cover"
+                  referrerPolicy="no-referrer"
+                />
               )}
             </div>
           </section>
