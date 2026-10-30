@@ -12,7 +12,26 @@ cd frontend && npm install && npm run dev
 ```
 - Web: http://localhost:5173
 - API docs: http://localhost:8000/docs
-- Email verification links are printed in the `api` container logs until an email provider is added.
+- By default, verification and password-reset links are printed in the `api` container logs. To send real email, configure Resend with `RESEND_API_KEY` and `EMAIL_FROM`.
+
+### Configure Resend
+
+1. Create a Resend API key.
+2. Add `RESEND_API_KEY=re_xxx` to `backend/.env`.
+3. Restart the API.
+
+Before a sending domain is verified, use Resend's default `onboarding@resend.dev` sender. Resend restricts this sender to the email address associated with the account. Once a domain is verified, set `EMAIL_FROM=Vaultly <noreply@your-domain.com>`.
+
+### Development-only manual verification
+
+Leave `RESEND_API_KEY` empty to disable email delivery locally. Verify a local account from the backend directory:
+
+```bash
+cd backend
+python verify_user.py user@example.com
+```
+
+This command is disabled automatically when `APP_ENV=production`.
 
 ### Run without Docker
 
