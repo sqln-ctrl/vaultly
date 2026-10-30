@@ -1,8 +1,23 @@
 export type User = {
   id: string; email: string; full_name: string; email_verified: boolean; timezone: string; currency: string;
 };
+export type DocumentItem = {
+  id: string;
+  original_filename: string;
+  mime_type: string;
+  size_bytes: number;
+  sha256: string;
+  page_count: number | null;
+  category: string;
+  status: string;
+  error_message: string | null;
+  summary: string | null;
+  uploaded_at: string;
+  processed_at: string | null;
+};
+export type Usage = { documents: number; document_limit: number; bytes: number; byte_limit: number };
 type AuthOut = { access_token: string; user: User };
-type Opts = Omit<RequestInit, "body"> & { json?: unknown };
+type Opts = Omit<RequestInit, "body"> & { json?: unknown; body?: BodyInit | null };
 
 let accessToken: string | null = null;
 
@@ -16,8 +31,13 @@ export async function refreshSession(): Promise<User | null> {
 
 export async function api<T = void>(path: string, opts: Opts = {}, retry = true): Promise<T> {
   const headers = new Headers(opts.headers);
-  let body: string | undefined;
-  if (opts.json !== undefined) { headers.set("Content-Type", "application/json"); body = JSON.stringify(opts.json); }
+  let body: BodyInit | null | undefined;
+  if (opts.body instanceof FormData) {
+    body = opts.body;
+  } else if (opts.json !== undefined) {
+    headers.set("Content-Type", "application/json");
+    body = JSON.stringify(opts.json);
+  }
   if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
   const res = await fetch(`/api/v1${path}`, { ...opts, body, headers, credentials: "include" });
   if (res.status === 401 && retry && !path.startsWith("/auth/")) {

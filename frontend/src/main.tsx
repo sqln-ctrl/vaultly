@@ -7,6 +7,7 @@ import Dashboard from "./pages/Dashboard";
 import VerifyEmail from "./pages/VerifyEmail";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import DocumentDetail from "./pages/DocumentDetail";
 import "./index.css";
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -26,6 +27,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/" element={<Protected><Dashboard /></Protected>} />
+          <Route path="/documents/:id" element={<Protected><DocumentDetail /></Protected>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>
