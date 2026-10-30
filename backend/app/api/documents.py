@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import mimetypes
 import os
 import re
@@ -24,6 +25,7 @@ MAX_FILE_BYTES = 15 * 1024 * 1024
 MAX_DOCUMENTS = 50
 MAX_STORAGE_BYTES = 200 * 1024 * 1024
 MAX_PAGES = 20
+logger = logging.getLogger(__name__)
 
 
 def _storage_root() -> Path:
@@ -114,15 +116,16 @@ async def upload_document(
         if mime_type == "application/pdf":
             try:
                 import fitz
-                with fitz.open(destination) as pdf:
+                with fitz.open(stream=destination.read_bytes(), filetype="pdf") as pdf:
                     page_count = pdf.page_count
                 if page_count > MAX_PAGES:
                     destination.unlink(missing_ok=True)
                     raise HTTPException(status.HTTP_400_BAD_REQUEST, "PDF exceeds the 20-page processing limit")
             except HTTPException:
                 raise
-            except Exception:
+            except Exception as exc:
                 destination.unlink(missing_ok=True)
+                logger.warning("PDF validation failed for uploaded file: %s", exc, exc_info=True)
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, "PDF could not be validated")
         else:
             try:
