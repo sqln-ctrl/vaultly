@@ -10,12 +10,13 @@ from ..config import settings
 from ..db import get_db
 from ..models import PasswordResetToken, RefreshToken, User
 from ..schemas import (
-    AuthOut, ForgotPasswordIn, LoginIn, RegisterIn, ResetPasswordIn, UserOut, VerifyIn,
+    AuthOut, ForgotPasswordIn, LoginIn, RegisterIn, ResendVerificationIn, ResetPasswordIn, UserOut, VerifyIn,
 )
 from ..security import (
     create_token, decode_token, hash_password, hash_token, new_refresh_token, verify_password,
 )
 from .deps import current_user
+from ..email import send_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 log = logging.getLogger("vaultly.auth")
@@ -42,7 +43,7 @@ def _issue(db: Session, user: User, response: Response) -> AuthOut:
 
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-def register(body: RegisterIn, db: Session = Depends(get_db)):
+async def register(body: RegisterIn, db: Session = Depends(get_db)):
     email = body.email.lower()
     if db.scalar(select(User).where(User.email == email)):
         raise HTTPException(status.HTTP_409_CONFLICT, "An account with this email already exists")
@@ -50,8 +51,13 @@ def register(body: RegisterIn, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     token = create_token(str(user.id), "verify", settings.verify_token_minutes)
-    # TODO(Phase 1b): send via email provider. Logged for local development.
     log.warning("Verify link for %s: %s/verify-email?token=%s", email, settings.frontend_url, token)
+    await send_email(
+        to=email,
+        subject="Verify your Vaultly email",
+        text=f"Verify your email: {settings.frontend_url}/verify-email?token={token}",
+        html=f'<p>Verify your Vaultly account:</p><p><a href="{settings.frontend_url}/verify-email?token={token}">Verify email</a></p>',
+    )
     return user
 
 
@@ -63,6 +69,22 @@ def verify_email(body: VerifyIn, db: Session = Depends(get_db)):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "This verification link is invalid or expired")
     user.email_verified = True
     db.commit()
+
+
+@router.post("/resend-verification", status_code=status.HTTP_202_ACCEPTED)
+async def resend_verification(body: ResendVerificationIn, db: Session = Depends(get_db)):
+    user = db.scalar(select(User).where(User.email == body.email.lower()))
+    if user and not user.email_verified:
+        token = create_token(str(user.id), "verify", settings.verify_token_minutes)
+        link = f"{settings.frontend_url}/verify-email?token={token}"
+        log.warning("Verify link for %s: %s", user.email, link)
+        await send_email(
+            to=user.email,
+            subject="Verify your Vaultly email",
+            text=f"Verify your email: {link}",
+            html=f'<p>Verify your Vaultly account:</p><p><a href="{link}">Verify email</a></p>',
+        )
+    return {"message": "If the account exists and is unverified, a new verification link has been sent"}
 
 
 @router.post("/login", response_model=AuthOut)
@@ -98,7 +120,7 @@ def logout(response: Response, db: Session = Depends(get_db), refresh_token: str
 
 
 @router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED)
-def forgot_password(body: ForgotPasswordIn, db: Session = Depends(get_db)):
+async def forgot_password(body: ForgotPasswordIn, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == body.email.lower()))
     if user:
         raw, hashed = new_refresh_token()
@@ -112,6 +134,13 @@ def forgot_password(body: ForgotPasswordIn, db: Session = Depends(get_db)):
         log.warning(
             "Password reset link for %s: %s/reset-password?token=%s",
             user.email, settings.frontend_url, raw,
+        )
+        link = f"{settings.frontend_url}/reset-password?token={raw}"
+        await send_email(
+            to=user.email,
+            subject="Reset your Vaultly password",
+            text=f"Reset your password: {link}",
+            html=f'<p>Reset your Vaultly password:</p><p><a href="{link}">Reset password</a></p><p>This link expires in {settings.reset_token_minutes} minutes.</p>',
         )
     # Always return the same response so account existence cannot be enumerated.
     return {"message": "If an account exists for that email, a reset link has been sent"}

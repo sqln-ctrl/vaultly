@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5173"
     cookie_secure: bool = False
     storage_dir: str = "./data/documents"
+    app_env: str = "development"
+    resend_api_key: str | None = None
+    email_from: str = "Vaultly <onboarding@resend.dev>"
 
 
 settings = Settings()
