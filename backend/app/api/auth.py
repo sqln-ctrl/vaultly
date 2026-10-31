@@ -107,6 +107,7 @@ def google_login(body: GoogleLoginIn, response: Response, db: Session = Depends(
             body.credential,
             Request(),
             audience=settings.google_client_id,
+            clock_skew_in_seconds=30,
         )
     except (ValueError, GoogleAuthError) as exc:
         log.warning("Google sign-in verification failed: %s: %s", type(exc).__name__, exc)
