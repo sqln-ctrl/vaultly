@@ -26,8 +26,6 @@ export default function AuthPage({ mode }: { mode: "login" | "register" }) {
   const [busy, setBusy] = useState(false);
   const isLogin = mode === "login";
 
-  if (user) return <Navigate to="/" replace />;
-
   useEffect(() => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
     if (!isLogin || !clientId || !googleButton.current) return;
@@ -68,6 +66,9 @@ export default function AuthPage({ mode }: { mode: "login" | "register" }) {
     script.defer = true;
     script.onload = initialize;
     document.head.appendChild(script);
+    return () => {
+      script.onload = null;
+    };
   }, [isLogin, loginWithGoogle, navigate]);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
@@ -83,6 +84,8 @@ export default function AuthPage({ mode }: { mode: "login" | "register" }) {
       setError((err as Error).message);
     } finally { setBusy(false); }
   }
+
+  if (user) return <Navigate to="/" replace />;
 
   return (
     <div className="grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
