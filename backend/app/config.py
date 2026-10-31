@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     resend_api_key: str | None = None
     email_from: str = "Vaultly <onboarding@resend.dev>"
     google_client_id: str | None = None
+    openai_api_key: str | None = None
+    openai_model: str = "gpt-4o-mini"
 
 
 settings = Settings()

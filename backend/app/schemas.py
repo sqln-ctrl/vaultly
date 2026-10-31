@@ -82,6 +82,20 @@ class DocumentOut(BaseModel):
     uploaded_at: datetime
     processed_at: datetime | None = None
     fields: DocumentFieldOut | None = None
+    extracted_text: str | None = None
+
+
+class ChatMessageIn(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+
+
+class ChatMessageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    role: str
+    content: str
+    created_at: datetime
 
 
 class DocumentRenameIn(BaseModel):

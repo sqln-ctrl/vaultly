@@ -58,6 +58,7 @@ class Document(Base):
     status: Mapped[str] = mapped_column(String(16), default="uploaded")
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     fields: Mapped["DocumentField | None"] = relationship(back_populates="document", uselist=False, cascade="all, delete-orphan")
@@ -78,3 +79,14 @@ class DocumentField(Base):
     currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
     user_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     document: Mapped[Document] = relationship(back_populates="fields")
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(16))
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
