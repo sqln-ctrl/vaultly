@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     resend_api_key: str | None = None
     email_from: str = "Vaultly <onboarding@resend.dev>"
+    google_client_id: str | None = None
 
 
 settings = Settings()

@@ -5,12 +5,14 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from google.auth.transport.requests import Request
+from google.oauth2 import id_token
 
 from ..config import settings
 from ..db import get_db
 from ..models import PasswordResetToken, RefreshToken, User
 from ..schemas import (
-    AuthOut, ForgotPasswordIn, LoginIn, RegisterIn, ResendVerificationIn, ResetPasswordIn, UserOut, VerifyIn,
+    AuthOut, ForgotPasswordIn, GoogleLoginIn, LoginIn, RegisterIn, ResendVerificationIn, ResetPasswordIn, UserOut, VerifyIn,
 )
 from ..security import (
     create_token, decode_token, hash_password, hash_token, new_refresh_token, verify_password,
@@ -92,6 +94,45 @@ def login(body: LoginIn, response: Response, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == body.email.lower()))
     if not user or not verify_password(user.password_hash, body.password):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Email or password is incorrect")
+    return _issue(db, user, response)
+
+
+@router.post("/google", response_model=AuthOut)
+def google_login(body: GoogleLoginIn, response: Response, db: Session = Depends(get_db)):
+    if not settings.google_client_id:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Google sign-in is not configured")
+    try:
+        claims = id_token.verify_oauth2_token(
+            body.credential,
+            Request(),
+            audience=settings.google_client_id,
+        )
+    except ValueError:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Google sign-in could not be verified")
+
+    google_sub = claims.get("sub")
+    email = claims.get("email", "").lower()
+    email_verified = claims.get("email_verified") is True
+    if not google_sub or not email or not email_verified:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "A verified Google account is required")
+
+    user = db.scalar(select(User).where(User.google_sub == google_sub))
+    if user is None:
+        user = db.scalar(select(User).where(User.email == email))
+    if user is None:
+        user = User(
+            email=email,
+            password_hash=None,
+            google_sub=google_sub,
+            full_name=str(claims.get("name") or email.split("@", 1)[0]).strip()[:120],
+            email_verified=True,
+        )
+        db.add(user)
+    else:
+        user.google_sub = google_sub
+        user.email_verified = True
+    db.commit()
+    db.refresh(user)
     return _issue(db, user, response)
 
 

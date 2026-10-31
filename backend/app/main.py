@@ -16,6 +16,7 @@ app = FastAPI(title="Vaultly API", version="0.1.0")
 class AuthRateLimitMiddleware(BaseHTTPMiddleware):
     paths = {
         "/api/v1/auth/login": (5, 60),
+        "/api/v1/auth/google": (10, 60),
         "/api/v1/auth/register": (5, 60),
         "/api/v1/auth/forgot-password": (5, 60),
         "/api/v1/auth/reset-password": (10, 60),

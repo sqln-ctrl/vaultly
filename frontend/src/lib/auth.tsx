@@ -4,6 +4,7 @@ import { api, refreshSession, setAccessToken, type User } from "./api";
 type Ctx = {
   user: User | null; loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: (credential: string) => Promise<void>;
   register: (full_name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 };
@@ -23,6 +24,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccessToken(data.access_token);
     setUser(data.user);
   };
+  const loginWithGoogle: Ctx["loginWithGoogle"] = async (credential) => {
+    const data = await api<{ access_token: string; user: User }>("/auth/google", {
+      method: "POST",
+      json: { credential },
+    });
+    setAccessToken(data.access_token);
+    setUser(data.user);
+  };
   const register: Ctx["register"] = async (full_name, email, password) => {
     await api("/auth/register", { method: "POST", json: { full_name, email, password } });
     await login(email, password);
@@ -33,5 +42,5 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
-  return <AuthContext.Provider value={{ user, loading, login, register, logout }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, loading, login, loginWithGoogle, register, logout }}>{children}</AuthContext.Provider>;
 }

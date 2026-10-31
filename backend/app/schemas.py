@@ -15,6 +15,10 @@ class LoginIn(BaseModel):
     password: str
 
 
+class GoogleLoginIn(BaseModel):
+    credential: str = Field(min_length=1, max_length=8192)
+
+
 class VerifyIn(BaseModel):
     token: str
 

@@ -22,6 +22,14 @@ cd frontend && npm install && npm run dev
 
 Before a sending domain is verified, use Resend's default `onboarding@resend.dev` sender. Resend restricts this sender to the email address associated with the account. Once a domain is verified, set `EMAIL_FROM=Vaultly <noreply@your-domain.com>`.
 
+### Configure Google sign-in
+
+1. Create an OAuth 2.0 Web Client ID in Google Cloud Console.
+2. Add the allowed JavaScript origins used for the app, such as `http://localhost:5173`.
+3. Set `GOOGLE_CLIENT_ID` in `backend/.env`.
+4. Set the same client ID as `VITE_GOOGLE_CLIENT_ID` in `frontend/.env`.
+5. Restart the frontend and API.
+
 ### Development-only manual verification
 
 Leave `RESEND_API_KEY` empty to disable email delivery locally. Verify a local account from the backend directory:
