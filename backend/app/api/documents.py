@@ -15,9 +15,10 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import get_db
-from ..models import Document, DocumentField, User
-from ..schemas import DocumentOut, DocumentRenameIn, UsageOut
+from ..models import ChatMessage, Document, DocumentField, User
+from ..schemas import ChatMessageIn, ChatMessageOut, DocumentOut, DocumentRenameIn, UsageOut
 from ..security import create_token, decode_token
+from ..processing import answer_document_question, process_document
 from .deps import verified_user
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -63,6 +64,16 @@ def _usage(db: Session, user: User) -> tuple[int, int]:
     count = db.scalar(select(func.count(Document.id)).where(Document.user_id == user.id)) or 0
     size = db.scalar(select(func.coalesce(func.sum(Document.size_bytes), 0)).where(Document.user_id == user.id)) or 0
     return int(count), int(size)
+
+
+def _parse_date(value) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
 
 
 @router.get("/usage", response_model=UsageOut)
@@ -137,6 +148,8 @@ async def upload_document(
                 destination.unlink(missing_ok=True)
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, "Image could not be validated")
 
+        result = process_document(destination, mime_type, file.filename)
+        fields_data = result["fields"]
         document = Document(
             user_id=user.id,
             original_filename=_safe_filename(file.filename),
@@ -145,12 +158,24 @@ async def upload_document(
             size_bytes=size,
             sha256=sha256.hexdigest(),
             page_count=page_count,
-            category="Other",
+            category=result["category"],
             status="ready",
-            fields=None,
+            summary=result["summary"],
+            extracted_text=result["text"],
             processed_at=datetime.now(timezone.utc),
         )
         db.add(document)
+        db.commit()
+        db.refresh(document)
+        document.fields = DocumentField(
+            document_id=document.id,
+            vendor=fields_data.get("vendor"),
+            doc_number=fields_data.get("doc_number"),
+            issue_date=_parse_date(fields_data.get("issue_date")),
+            due_date=_parse_date(fields_data.get("due_date")),
+            total_amount=fields_data.get("total_amount"),
+            currency=fields_data.get("currency"),
+        )
         db.commit()
         db.refresh(document)
         return document
@@ -180,6 +205,80 @@ def list_documents(
 @router.get("/{document_id}", response_model=DocumentOut)
 def get_document(document_id: uuid.UUID, user: User = Depends(verified_user), db: Session = Depends(get_db)):
     return _owned_document(db, document_id, user)
+
+
+@router.post("/{document_id}/process", response_model=DocumentOut)
+def reprocess_document(document_id: uuid.UUID, user: User = Depends(verified_user), db: Session = Depends(get_db)):
+    document = _owned_document(db, document_id, user)
+    path = (_storage_root() / document.storage_key).resolve()
+    try:
+        path.relative_to(_storage_root())
+    except ValueError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Stored file not found")
+    if not path.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Stored file not found")
+
+    result = process_document(path, document.mime_type, document.original_filename)
+    fields_data = result["fields"]
+    document.category = result["category"]
+    document.summary = result["summary"]
+    document.extracted_text = result["text"]
+    document.status = "ready"
+    document.error_message = None
+    document.processed_at = datetime.now(timezone.utc)
+    if document.fields is None:
+        document.fields = DocumentField(document_id=document.id)
+    document.fields.vendor = fields_data.get("vendor")
+    document.fields.doc_number = fields_data.get("doc_number")
+    document.fields.issue_date = _parse_date(fields_data.get("issue_date"))
+    document.fields.due_date = _parse_date(fields_data.get("due_date"))
+    document.fields.total_amount = fields_data.get("total_amount")
+    document.fields.currency = fields_data.get("currency")
+    db.commit()
+    db.refresh(document)
+    return document
+
+
+@router.get("/{document_id}/chat", response_model=list[ChatMessageOut])
+def get_chat(document_id: uuid.UUID, user: User = Depends(verified_user), db: Session = Depends(get_db)):
+    _owned_document(db, document_id, user)
+    return db.scalars(
+        select(ChatMessage)
+        .where(ChatMessage.document_id == document_id, ChatMessage.user_id == user.id)
+        .order_by(ChatMessage.created_at.asc())
+    ).all()
+
+
+@router.post("/{document_id}/chat", response_model=ChatMessageOut)
+def send_chat(
+    document_id: uuid.UUID,
+    body: ChatMessageIn,
+    user: User = Depends(verified_user),
+    db: Session = Depends(get_db),
+):
+    document = _owned_document(db, document_id, user)
+    question = ChatMessage(document_id=document.id, user_id=user.id, role="user", content=body.message.strip())
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    history_rows = db.scalars(
+        select(ChatMessage)
+        .where(ChatMessage.document_id == document.id, ChatMessage.user_id == user.id)
+        .order_by(ChatMessage.created_at.asc())
+    ).all()
+    history = [{"role": row.role, "content": row.content} for row in history_rows if row.role in ("user", "assistant")]
+    answer_text = answer_document_question(
+        document.extracted_text or "",
+        document.summary or "",
+        body.message.strip(),
+        history[:-1],
+    )
+    answer = ChatMessage(document_id=document.id, user_id=user.id, role="assistant", content=answer_text)
+    db.add(answer)
+    db.commit()
+    db.refresh(answer)
+    return answer
 
 
 @router.patch("/{document_id}", response_model=DocumentOut)
