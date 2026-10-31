@@ -81,11 +81,10 @@ class DocumentField(Base):
     document: Mapped[Document] = relationship(back_populates="fields")
 
 
-class ChatMessage(Base):
-    __tablename__ = "chat_messages"
+class VaultChatMessage(Base):
+    __tablename__ = "vault_chat_messages"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    document_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), index=True)
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True)
     role: Mapped[str] = mapped_column(String(16))
     content: Mapped[str] = mapped_column(Text)

@@ -131,21 +131,24 @@ def process_document(path: Path, mime_type: str, filename: str) -> dict:
     }
 
 
-def answer_document_question(document_text: str, document_summary: str, question: str, history: list[dict]) -> str:
-    context = document_text[:16000] or document_summary or "No readable document text is available."
+def answer_vault_question(documents: list[dict], question: str, history: list[dict]) -> str:
+    context_parts = []
+    for document in documents:
+        text = document.get("text") or document.get("summary") or "No readable text is available."
+        context_parts.append(f"[Document: {document['name']}]\n{text[:6000]}")
+    context = "\n\n".join(context_parts)[:24000]
     system = (
-        "You answer questions about one private document. Use only the supplied document context. "
-        "If the answer is not supported by the document, say so clearly."
+        "You answer questions across the user's entire document vault. Cite the document filename when useful. "
+        "Use only the supplied document context and clearly state when an answer is not supported."
     )
-    messages = [{"role": "system", "content": system}, {"role": "user", "content": f"Document context:\n{context}"}]
+    messages = [{"role": "system", "content": system}]
+    if context:
+        messages.append({"role": "user", "content": f"Vault context:\n{context}"})
     messages.extend(history[-8:])
     messages.append({"role": "user", "content": question})
     result = _openai_request(messages)
     if result:
         return result.strip()
-
-    words = re.findall(r"[\w$€£.,%/-]+", context)
-    if words:
-        snippet = " ".join(words[:100])
-        return f"I could not reach the AI service. Here is the document text available locally: {snippet}"
-    return "No readable text is available for this document."
+    if context:
+        return "The AI service is unavailable. I found the following context in your vault, but cannot generate a complete answer.\n\n" + context[:3000]
+    return "Your vault has no readable document content yet."

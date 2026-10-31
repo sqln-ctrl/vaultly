@@ -15,10 +15,10 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import get_db
-from ..models import ChatMessage, Document, DocumentField, User
+from ..models import Document, DocumentField, User, VaultChatMessage
 from ..schemas import ChatMessageIn, ChatMessageOut, DocumentOut, DocumentRenameIn, UsageOut
 from ..security import create_token, decode_token
-from ..processing import answer_document_question, process_document
+from ..processing import answer_vault_question, process_document
 from .deps import verified_user
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -202,83 +202,55 @@ def list_documents(
     return db.scalars(statement.order_by(Document.uploaded_at.desc()).offset(offset).limit(limit)).all()
 
 
-@router.get("/{document_id}", response_model=DocumentOut)
-def get_document(document_id: uuid.UUID, user: User = Depends(verified_user), db: Session = Depends(get_db)):
-    return _owned_document(db, document_id, user)
-
-
-@router.post("/{document_id}/process", response_model=DocumentOut)
-def reprocess_document(document_id: uuid.UUID, user: User = Depends(verified_user), db: Session = Depends(get_db)):
-    document = _owned_document(db, document_id, user)
-    path = (_storage_root() / document.storage_key).resolve()
-    try:
-        path.relative_to(_storage_root())
-    except ValueError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Stored file not found")
-    if not path.is_file():
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Stored file not found")
-
-    result = process_document(path, document.mime_type, document.original_filename)
-    fields_data = result["fields"]
-    document.category = result["category"]
-    document.summary = result["summary"]
-    document.extracted_text = result["text"]
-    document.status = "ready"
-    document.error_message = None
-    document.processed_at = datetime.now(timezone.utc)
-    if document.fields is None:
-        document.fields = DocumentField(document_id=document.id)
-    document.fields.vendor = fields_data.get("vendor")
-    document.fields.doc_number = fields_data.get("doc_number")
-    document.fields.issue_date = _parse_date(fields_data.get("issue_date"))
-    document.fields.due_date = _parse_date(fields_data.get("due_date"))
-    document.fields.total_amount = fields_data.get("total_amount")
-    document.fields.currency = fields_data.get("currency")
-    db.commit()
-    db.refresh(document)
-    return document
-
-
-@router.get("/{document_id}/chat", response_model=list[ChatMessageOut])
-def get_chat(document_id: uuid.UUID, user: User = Depends(verified_user), db: Session = Depends(get_db)):
-    _owned_document(db, document_id, user)
+@router.get("/chat", response_model=list[ChatMessageOut])
+def get_vault_chat(user: User = Depends(verified_user), db: Session = Depends(get_db)):
     return db.scalars(
-        select(ChatMessage)
-        .where(ChatMessage.document_id == document_id, ChatMessage.user_id == user.id)
-        .order_by(ChatMessage.created_at.asc())
+        select(VaultChatMessage)
+        .where(VaultChatMessage.user_id == user.id)
+        .order_by(VaultChatMessage.created_at.asc())
     ).all()
 
 
-@router.post("/{document_id}/chat", response_model=ChatMessageOut)
-def send_chat(
-    document_id: uuid.UUID,
+@router.post("/chat", response_model=ChatMessageOut)
+def send_vault_chat(
     body: ChatMessageIn,
     user: User = Depends(verified_user),
     db: Session = Depends(get_db),
 ):
-    document = _owned_document(db, document_id, user)
-    question = ChatMessage(document_id=document.id, user_id=user.id, role="user", content=body.message.strip())
+    question = VaultChatMessage(user_id=user.id, role="user", content=body.message.strip())
     db.add(question)
     db.commit()
     db.refresh(question)
 
     history_rows = db.scalars(
-        select(ChatMessage)
-        .where(ChatMessage.document_id == document.id, ChatMessage.user_id == user.id)
-        .order_by(ChatMessage.created_at.asc())
+        select(VaultChatMessage)
+        .where(VaultChatMessage.user_id == user.id)
+        .order_by(VaultChatMessage.created_at.asc())
     ).all()
     history = [{"role": row.role, "content": row.content} for row in history_rows if row.role in ("user", "assistant")]
-    answer_text = answer_document_question(
-        document.extracted_text or "",
-        document.summary or "",
-        body.message.strip(),
-        history[:-1],
-    )
-    answer = ChatMessage(document_id=document.id, user_id=user.id, role="assistant", content=answer_text)
+
+    documents = db.scalars(
+        select(Document).where(Document.user_id == user.id).order_by(Document.uploaded_at.desc())
+    ).all()
+    context = [
+        {
+            "name": document.original_filename,
+            "text": document.extracted_text or document.summary or "",
+            "summary": document.summary or "",
+        }
+        for document in documents
+    ]
+    answer_text = answer_vault_question(context, body.message.strip(), history[:-1])
+    answer = VaultChatMessage(user_id=user.id, role="assistant", content=answer_text)
     db.add(answer)
     db.commit()
     db.refresh(answer)
     return answer
+
+
+@router.get("/{document_id}", response_model=DocumentOut)
+def get_document(document_id: uuid.UUID, user: User = Depends(verified_user), db: Session = Depends(get_db)):
+    return _owned_document(db, document_id, user)
 
 
 @router.patch("/{document_id}", response_model=DocumentOut)
