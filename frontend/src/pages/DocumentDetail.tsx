@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, type ChatMessageItem, type DocumentItem } from "../lib/api";
+import { api, type DocumentItem } from "../lib/api";
 
 export default function DocumentDetail() {
   const { id } = useParams();
@@ -9,9 +9,6 @@ export default function DocumentDetail() {
   const [error, setError] = useState("");
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewError, setPreviewError] = useState("");
-  const [messages, setMessages] = useState<ChatMessageItem[]>([]);
-  const [chatMessage, setChatMessage] = useState("");
-  const [chatting, setChatting] = useState(false);
 
   useEffect(() => {
     if (id) api<DocumentItem>(`/documents/${id}`).then(setDocument).catch((err) => setError((err as Error).message));
@@ -30,49 +27,10 @@ export default function DocumentDetail() {
     return () => { active = false; };
   }, [id]);
 
-  useEffect(() => {
-    if (!id) return;
-    api<ChatMessageItem[]>(`/documents/${id}/chat`)
-      .then(setMessages)
-      .catch(() => {});
-  }, [id]);
-
   async function removeDocument() {
     if (!id || !window.confirm("Delete this document permanently?")) return;
     await api(`/documents/${id}`, { method: "DELETE" });
     navigate("/");
-  }
-
-  async function reprocessDocument() {
-    if (!id) return;
-    setError("");
-    try {
-      setDocument(await api<DocumentItem>(`/documents/${id}/process`, { method: "POST" }));
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }
-
-  async function sendChat(event: React.FormEvent) {
-    event.preventDefault();
-    if (!id || !chatMessage.trim()) return;
-    setChatting(true);
-    try {
-      const answer = await api<ChatMessageItem>(`/documents/${id}/chat`, {
-        method: "POST",
-        json: { message: chatMessage.trim() },
-      });
-      setMessages((current) => [
-        ...current,
-        { id: `pending-${current.length}`, role: "user", content: chatMessage.trim(), created_at: new Date().toISOString() },
-        answer,
-      ]);
-      setChatMessage("");
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setChatting(false);
-    }
   }
 
   async function downloadDocument() {
@@ -142,32 +100,8 @@ export default function DocumentDetail() {
             </dl>
           </section>
         )}
-        <section className="mt-6">
-          <h2 className="text-sm font-medium">Ask about this document</h2>
-          <div className="mt-2 max-h-72 space-y-2 overflow-y-auto rounded-md border border-line bg-white p-3">
-            {messages.length === 0 && <p className="text-sm text-ink/60">No messages yet.</p>}
-            {messages.map((message) => (
-              <p key={message.id} className={message.role === "user" ? "text-right text-sm" : "text-sm text-moss"}>
-                <span className="inline-block max-w-[85%] rounded-md bg-ink/5 px-3 py-2 text-left">{message.content}</span>
-              </p>
-            ))}
-          </div>
-          <form className="mt-2 flex gap-2" onSubmit={sendChat}>
-            <input
-              className="field"
-              value={chatMessage}
-              onChange={(event) => setChatMessage(event.target.value)}
-              placeholder="Ask a question..."
-              maxLength={4000}
-            />
-            <button className="btn shrink-0" disabled={chatting || !chatMessage.trim()}>
-              {chatting ? "Thinking…" : "Send"}
-            </button>
-          </form>
-        </section>
         <div className="mt-6 flex gap-3">
           <button className="btn" onClick={downloadDocument}>Download</button>
-          <button className="rounded-md border border-moss px-4 py-2.5 text-moss" onClick={reprocessDocument}>Reprocess</button>
           <button className="rounded-md border border-danger px-4 py-2.5 text-danger" onClick={removeDocument}>Delete</button>
         </div>
       </div>
