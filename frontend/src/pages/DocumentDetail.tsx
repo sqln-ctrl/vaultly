@@ -65,14 +65,14 @@ export default function DocumentDetail() {
                 <iframe
                   src={previewUrl}
                   title={`Preview of ${document.original_filename}`}
-                  className="pointer-events-none h-64 w-full border-0"
+                  className="h-[70vh] min-h-[480px] w-full border-0"
                   referrerPolicy="no-referrer"
                 />
               ) : (
                 <img
                   src={previewUrl}
                   alt={`Preview of ${document.original_filename}`}
-                  className="pointer-events-none mx-auto max-h-96 max-w-full object-contain"
+                  className="mx-auto max-h-[70vh] max-w-full object-contain"
                   referrerPolicy="no-referrer"
                 />
               )}
