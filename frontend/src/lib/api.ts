@@ -12,8 +12,23 @@ export type DocumentItem = {
   status: string;
   error_message: string | null;
   summary: string | null;
+  extracted_text: string | null;
+  fields: {
+    vendor: string | null;
+    doc_number: string | null;
+    issue_date: string | null;
+    due_date: string | null;
+    total_amount: number | null;
+    currency: string | null;
+  } | null;
   uploaded_at: string;
   processed_at: string | null;
+};
+export type ChatMessageItem = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
 };
 export type Usage = { documents: number; document_limit: number; bytes: number; byte_limit: number };
 type AuthOut = { access_token: string; user: User };
