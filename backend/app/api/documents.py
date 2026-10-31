@@ -242,6 +242,8 @@ def download_file(
     return FileResponse(
         path,
         media_type=document.mime_type,
-        filename=document.original_filename,
-        headers={"Cache-Control": "private, no-store"},
+        headers={
+            "Cache-Control": "private, no-store",
+            "Content-Disposition": "inline",
+        },
     )
