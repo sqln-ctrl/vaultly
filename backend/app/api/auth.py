@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from google.auth.transport.requests import Request
 from google.oauth2 import id_token
+from google.auth.exceptions import GoogleAuthError
 
 from ..config import settings
 from ..db import get_db
@@ -107,13 +108,20 @@ def google_login(body: GoogleLoginIn, response: Response, db: Session = Depends(
             Request(),
             audience=settings.google_client_id,
         )
-    except ValueError:
+    except (ValueError, GoogleAuthError) as exc:
+        log.warning("Google sign-in verification failed: %s: %s", type(exc).__name__, exc)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Google sign-in could not be verified")
 
     google_sub = claims.get("sub")
     email = claims.get("email", "").lower()
     email_verified = claims.get("email_verified") is True
     if not google_sub or not email or not email_verified:
+        log.warning(
+            "Google sign-in claims rejected: sub=%s email=%s email_verified=%s",
+            bool(google_sub),
+            bool(email),
+            email_verified,
+        )
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "A verified Google account is required")
 
     user = db.scalar(select(User).where(User.google_sub == google_sub))
