@@ -1,7 +1,13 @@
 import { useAuth } from "../lib/auth";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, type ChatMessageItem, type DocumentItem, type Usage } from "../lib/api";
+import {
+  api,
+  type ChatConversationItem,
+  type ChatMessageItem,
+  type DocumentItem,
+  type Usage,
+} from "../lib/api";
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
@@ -15,6 +21,8 @@ export default function Dashboard() {
   const [chatMessages, setChatMessages] = useState<ChatMessageItem[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatting, setChatting] = useState(false);
+  const [conversations, setConversations] = useState<ChatConversationItem[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
 
   async function load() {
     const [items, limits] = await Promise.all([
@@ -28,9 +36,63 @@ export default function Dashboard() {
   useEffect(() => { if (user?.email_verified) load().catch((err) => setError((err as Error).message)); }, [user?.email_verified]);
   useEffect(() => {
     if (user?.email_verified) {
-      api<ChatMessageItem[]>("/documents/chat").then(setChatMessages).catch(() => {});
+      loadChats();
     }
   }, [user?.email_verified]);
+
+  async function loadChats() {
+    try {
+      const chats = await api<ChatConversationItem[]>("/documents/chats");
+      setConversations(chats);
+      if (!activeConversationId && chats.length > 0) {
+        await openChat(chats[0].id);
+      }
+    } catch {
+      setConversations([]);
+    }
+  }
+
+  async function openChat(conversationId: string) {
+    setActiveConversationId(conversationId);
+    try {
+      const messages = await api<ChatMessageItem[]>(`/documents/chat?conversation_id=${conversationId}`);
+      setChatMessages(messages);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  async function createChat() {
+    try {
+      const chat = await api<ChatConversationItem>("/documents/chats", {
+        method: "POST",
+        json: { title: "New chat" },
+      });
+      setConversations((current) => [chat, ...current]);
+      setActiveConversationId(chat.id);
+      setChatMessages([]);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  async function deleteChat(conversationId: string) {
+    if (!window.confirm("Delete this chat permanently?")) return;
+    try {
+      await api(`/documents/chats/${conversationId}`, { method: "DELETE" });
+      setConversations((current) => {
+        const remaining = current.filter((chat) => chat.id !== conversationId);
+        if (activeConversationId === conversationId) {
+          setActiveConversationId(remaining[0]?.id ?? null);
+          if (remaining[0]) void openChat(remaining[0].id);
+          else setChatMessages([]);
+        }
+        return remaining;
+      });
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
 
   async function resendVerification() {
     if (!user?.email) return;
@@ -66,7 +128,7 @@ export default function Dashboard() {
     try {
       const answer = await api<ChatMessageItem>("/documents/chat", {
         method: "POST",
-        json: { message },
+        json: { message, conversation_id: activeConversationId },
       });
       setChatMessages((current) => [
         ...current,
@@ -74,6 +136,10 @@ export default function Dashboard() {
         answer,
       ]);
       setChatInput("");
+      if (answer.conversation_id && answer.conversation_id !== activeConversationId) {
+        setActiveConversationId(answer.conversation_id);
+      }
+      await loadChats();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -151,7 +217,7 @@ export default function Dashboard() {
             </button>
           )}
           {chatOpen && (
-            <aside className="fixed bottom-6 right-6 flex h-[min(620px,calc(100vh-3rem))] w-[min(380px,calc(100vw-3rem))] flex-col rounded-md border border-line bg-white shadow-xl">
+            <aside className="fixed bottom-6 right-6 flex h-[min(620px,calc(100vh-3rem))] w-[min(620px,calc(100vw-3rem))] flex-col rounded-md border border-line bg-white shadow-xl">
               <header className="flex items-center justify-between border-b border-line px-4 py-3">
                 <div>
                   <h2 className="font-display text-lg">Ask your vault</h2>
@@ -159,26 +225,43 @@ export default function Dashboard() {
                 </div>
                 <button type="button" className="text-xl text-ink/60" onClick={() => setChatOpen(false)} aria-label="Close vault chat">×</button>
               </header>
-              <div className="flex-1 space-y-2 overflow-y-auto p-3">
-                {chatMessages.length === 0 && <p className="text-sm text-ink/60">Ask a question about your documents.</p>}
-                {chatMessages.map((message) => (
-                  <p key={message.id} className={message.role === "user" ? "text-right text-sm" : "text-sm text-moss"}>
-                    <span className="inline-block max-w-[85%] rounded-md bg-ink/5 px-3 py-2 text-left">{message.content}</span>
-                  </p>
-                ))}
+              <div className="flex min-h-0 flex-1">
+                <nav className="w-44 shrink-0 border-r border-line p-2">
+                  <button type="button" className="btn mb-2 w-full text-xs" onClick={createChat}>+ New chat</button>
+                  <div className="space-y-1">
+                    {conversations.map((chat) => (
+                      <div key={chat.id} className={`group flex items-center rounded-md ${chat.id === activeConversationId ? "bg-moss/10" : ""}`}>
+                        <button type="button" className="min-w-0 flex-1 truncate px-2 py-2 text-left text-xs" onClick={() => openChat(chat.id)}>
+                          {chat.title}
+                        </button>
+                        <button type="button" className="px-2 text-xs text-danger opacity-60 hover:opacity-100" onClick={() => deleteChat(chat.id)} aria-label={`Delete ${chat.title}`}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                </nav>
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <div className="flex-1 space-y-2 overflow-y-auto p-3">
+                    {chatMessages.length === 0 && <p className="text-sm text-ink/60">Ask a question about your documents.</p>}
+                    {chatMessages.map((message) => (
+                      <p key={message.id} className={message.role === "user" ? "text-right text-sm" : "text-sm text-moss"}>
+                        <span className="inline-block max-w-[85%] whitespace-pre-wrap rounded-md bg-ink/5 px-3 py-2 text-left">{message.content}</span>
+                      </p>
+                    ))}
+                  </div>
+                  <form className="flex gap-2 border-t border-line p-3" onSubmit={sendVaultChat}>
+                    <input
+                      className="field"
+                      value={chatInput}
+                      onChange={(event) => setChatInput(event.target.value)}
+                      placeholder="Ask across all documents..."
+                      maxLength={4000}
+                    />
+                    <button className="btn shrink-0" disabled={chatting || !chatInput.trim()}>
+                      {chatting ? "..." : "Send"}
+                    </button>
+                  </form>
+                </div>
               </div>
-              <form className="flex gap-2 border-t border-line p-3" onSubmit={sendVaultChat}>
-                <input
-                  className="field"
-                  value={chatInput}
-                  onChange={(event) => setChatInput(event.target.value)}
-                  placeholder="Ask across all documents..."
-                  maxLength={4000}
-                />
-                <button className="btn shrink-0" disabled={chatting || !chatInput.trim()}>
-                  {chatting ? "..." : "Send"}
-                </button>
-              </form>
             </aside>
           )}
         </>

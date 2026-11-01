@@ -29,6 +29,13 @@ export type ChatMessageItem = {
   role: "user" | "assistant";
   content: string;
   created_at: string;
+  conversation_id?: string | null;
+};
+export type ChatConversationItem = {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
 };
 export type Usage = { documents: number; document_limit: number; bytes: number; byte_limit: number };
 type AuthOut = { access_token: string; user: User };
