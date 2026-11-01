@@ -1,11 +1,5 @@
-import base64
-import json
 import re
 from pathlib import Path
-
-import httpx
-
-from .config import settings
 
 
 def extract_text(path: Path, mime_type: str) -> str:
@@ -73,86 +67,11 @@ def local_summary(text: str) -> str:
     return clean[:500] + ("..." if len(clean) > 500 else "")
 
 
-def _grok_request(messages: list[dict], response_format: dict | None = None) -> str | None:
-    if not settings.grok_api_key:
-        return None
-    payload: dict = {
-        "model": settings.grok_model,
-        "messages": messages,
-        "temperature": 0.2,
-    }
-    if response_format:
-        payload["response_format"] = response_format
-
-    try:
-        response = httpx.post(
-            "https://api.x.ai/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {settings.grok_api_key}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-            timeout=30,
-        )
-        response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
-    except (httpx.HTTPError, KeyError, TypeError, json.JSONDecodeError):
-        return None
-
-
 def process_document(path: Path, mime_type: str, filename: str) -> dict:
     text = extract_text(path, mime_type)
-    if mime_type.startswith("image/") and settings.grok_api_key:
-        try:
-            image = base64.b64encode(path.read_bytes()).decode("ascii")
-            result = _grok_request([{
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "Read all visible text in this document image and return only the text.",
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:{mime_type};base64,{image}"},
-                    },
-                ],
-            }])
-            if result:
-                text = result.strip()
-        except (OSError, ValueError):
-            text = ""
-
     fields = extract_fields(text)
     category = classify_document(text, filename)
     summary = local_summary(text)
-
-    if settings.grok_api_key and text.strip():
-        prompt = (
-            "Analyze this document text. Return JSON with keys vendor, doc_number, issue_date, due_date, "
-            "total_amount, currency, category, summary. Use ISO YYYY-MM-DD dates or null, numeric amount or null, "
-            "currency code or null, and keep the summary under 300 characters.\n\n" + text[:12000]
-        )
-        result = _grok_request(
-            [{"role": "user", "content": prompt}],
-            {"type": "json_object"},
-        )
-        if result:
-            try:
-                ai = json.loads(result)
-                fields.update({
-                    "vendor": ai.get("vendor"),
-                    "doc_number": ai.get("doc_number"),
-                    "issue_date": ai.get("issue_date"),
-                    "due_date": ai.get("due_date"),
-                    "total_amount": ai.get("total_amount"),
-                    "currency": ai.get("currency"),
-                })
-                category = ai.get("category") or category
-                summary = ai.get("summary") or summary
-            except json.JSONDecodeError:
-                pass
-
     return {
         "text": text,
         "category": category[:32],
@@ -167,22 +86,9 @@ def answer_vault_question(documents: list[dict], question: str, history: list[di
         text = document.get("text") or document.get("summary") or "No readable text is available."
         context_parts.append(f"[Document: {document['name']}]\n{text[:6000]}")
     context = "\n\n".join(context_parts)[:24000]
-    system = (
-        "You answer questions across the user's entire document vault. Cite the document filename when useful. "
-        "Use only the supplied document context and clearly state when an answer is not supported."
-    )
-    messages = [{"role": "system", "content": system}]
-    if context:
-        messages.append({"role": "user", "content": f"Vault context:\n{context}"})
-    messages.extend(history[-8:])
-    messages.append({"role": "user", "content": question})
-
-    result = _grok_request(messages)
-    if result:
-        return result.strip()
     if context:
         return (
-            "The Grok AI service is unavailable. I found the following context in your vault, "
-            "but cannot generate a complete answer.\n\n" + context[:3000]
+            "AI chat is not configured. I found the following context in your vault:\n\n"
+            + context[:3000]
         )
     return "Your vault has no readable document content yet."

@@ -19,8 +19,6 @@ class Settings(BaseSettings):
     resend_api_key: str | None = None
     email_from: str = "Vaultly <onboarding@resend.dev>"
     google_client_id: str | None = None
-    grok_api_key: str | None = None
-    grok_model: str = "grok-3-mini"
 
 
 settings = Settings()
