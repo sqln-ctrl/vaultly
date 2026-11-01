@@ -182,6 +182,8 @@ def answer_vault_question(documents: list[dict], question: str, history: list[di
         "Answer directly and concisely in one short paragraph unless a list is necessary. "
         "Keep the response under 100 words. Do not use asterisks, markdown bullets, bold text, "
         "headings, or any other decorative formatting. "
+        "For factual questions, give only the requested fact without expanding abbreviations, "
+        "adding definitions, or explaining the meaning unless the question explicitly asks for one. "
         "Use only the supplied document context. If a document supports the answer, add a final "
         "line exactly in this format: Sources: filename.pdf, filename2.pdf. Do not list documents "
         "that were not used, and do not add a Sources line if no document supports the answer. "
