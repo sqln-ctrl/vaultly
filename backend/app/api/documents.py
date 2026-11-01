@@ -5,18 +5,26 @@ import os
 import re
 import shutil
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import get_db
-from ..models import Document, DocumentField, User, VaultChatMessage
-from ..schemas import ChatMessageIn, ChatMessageOut, DocumentOut, DocumentRenameIn, UsageOut
+from ..models import Document, DocumentField, User, VaultChatConversation, VaultChatMessage
+from ..schemas import (
+    ChatConversationIn,
+    ChatConversationOut,
+    ChatMessageIn,
+    ChatMessageOut,
+    DocumentOut,
+    DocumentRenameIn,
+    UsageOut,
+)
 from ..security import create_token, decode_token
 from ..processing import answer_vault_question, process_document
 from .deps import verified_user
@@ -74,6 +82,27 @@ def _parse_date(value) -> datetime | None:
         return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
     except ValueError:
         return None
+
+
+def _delete_expired_chat_messages(db: Session, user: User) -> None:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=15)
+    db.execute(
+        delete(VaultChatMessage).where(
+            VaultChatMessage.user_id == user.id,
+            VaultChatMessage.created_at < cutoff,
+        )
+    )
+    expired_conversations = db.scalars(
+        select(VaultChatConversation.id).where(
+            VaultChatConversation.user_id == user.id,
+            VaultChatConversation.updated_at < cutoff,
+        )
+    ).all()
+    if expired_conversations:
+        db.execute(delete(VaultChatConversation).where(
+            VaultChatConversation.id.in_(expired_conversations)
+        ))
+    db.commit()
 
 
 @router.get("/usage", response_model=UsageOut)
@@ -203,12 +232,64 @@ def list_documents(
 
 
 @router.get("/chat", response_model=list[ChatMessageOut])
-def get_vault_chat(user: User = Depends(verified_user), db: Session = Depends(get_db)):
-    return db.scalars(
+def get_vault_chat(
+    conversation_id: uuid.UUID | None = None,
+    user: User = Depends(verified_user),
+    db: Session = Depends(get_db),
+):
+    _delete_expired_chat_messages(db, user)
+    statement = (
         select(VaultChatMessage)
         .where(VaultChatMessage.user_id == user.id)
         .order_by(VaultChatMessage.created_at.asc())
+    )
+    if conversation_id:
+        statement = statement.where(VaultChatMessage.conversation_id == conversation_id)
+    return db.scalars(statement).all()
+
+
+@router.get("/chats", response_model=list[ChatConversationOut])
+def list_vault_chats(user: User = Depends(verified_user), db: Session = Depends(get_db)):
+    _delete_expired_chat_messages(db, user)
+    return db.scalars(
+        select(VaultChatConversation)
+        .where(VaultChatConversation.user_id == user.id)
+        .order_by(VaultChatConversation.updated_at.desc())
     ).all()
+
+
+@router.post("/chats", response_model=ChatConversationOut, status_code=status.HTTP_201_CREATED)
+def create_vault_chat(
+    body: ChatConversationIn,
+    user: User = Depends(verified_user),
+    db: Session = Depends(get_db),
+):
+    _delete_expired_chat_messages(db, user)
+    conversation = VaultChatConversation(user_id=user.id, title=body.title.strip() or "New chat")
+    db.add(conversation)
+    db.commit()
+    db.refresh(conversation)
+    return conversation
+
+
+@router.delete("/chats/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_vault_chat(
+    conversation_id: uuid.UUID,
+    user: User = Depends(verified_user),
+    db: Session = Depends(get_db),
+):
+    conversation = db.scalar(select(VaultChatConversation).where(
+        VaultChatConversation.id == conversation_id,
+        VaultChatConversation.user_id == user.id,
+    ))
+    if not conversation:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Chat not found")
+    db.execute(delete(VaultChatMessage).where(
+        VaultChatMessage.conversation_id == conversation_id,
+        VaultChatMessage.user_id == user.id,
+    ))
+    db.delete(conversation)
+    db.commit()
 
 
 @router.post("/chat", response_model=ChatMessageOut)
@@ -217,14 +298,36 @@ def send_vault_chat(
     user: User = Depends(verified_user),
     db: Session = Depends(get_db),
 ):
-    question = VaultChatMessage(user_id=user.id, role="user", content=body.message.strip())
+    _delete_expired_chat_messages(db, user)
+    conversation: VaultChatConversation | None = None
+    if body.conversation_id:
+        conversation = db.scalar(select(VaultChatConversation).where(
+            VaultChatConversation.id == body.conversation_id,
+            VaultChatConversation.user_id == user.id,
+        ))
+    if not conversation:
+        conversation = VaultChatConversation(user_id=user.id, title="New chat")
+        db.add(conversation)
+        db.commit()
+        db.refresh(conversation)
+
+    message = body.message.strip()
+    question = VaultChatMessage(
+        user_id=user.id,
+        conversation_id=conversation.id,
+        role="user",
+        content=message,
+    )
     db.add(question)
     db.commit()
     db.refresh(question)
+    if conversation.title == "New chat":
+        conversation.title = message[:60] + ("..." if len(message) > 60 else "")
 
     history_rows = db.scalars(
         select(VaultChatMessage)
         .where(VaultChatMessage.user_id == user.id)
+        .where(VaultChatMessage.conversation_id == conversation.id)
         .order_by(VaultChatMessage.created_at.asc())
     ).all()
     history = [{"role": row.role, "content": row.content} for row in history_rows if row.role in ("user", "assistant")]
@@ -241,11 +344,23 @@ def send_vault_chat(
         for document in documents
     ]
     answer_text = answer_vault_question(context, body.message.strip(), history[:-1])
-    answer = VaultChatMessage(user_id=user.id, role="assistant", content=answer_text)
+    answer = VaultChatMessage(
+        user_id=user.id,
+        conversation_id=conversation.id,
+        role="assistant",
+        content=answer_text,
+    )
     db.add(answer)
+    conversation.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(answer)
-    return answer
+    return {
+        "id": answer.id,
+        "role": answer.role,
+        "content": answer.content,
+        "created_at": answer.created_at,
+        "conversation_id": conversation.id,
+    }
 
 
 @router.get("/{document_id}", response_model=DocumentOut)

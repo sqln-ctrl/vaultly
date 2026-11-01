@@ -87,6 +87,7 @@ class DocumentOut(BaseModel):
 
 class ChatMessageIn(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
+    conversation_id: uuid.UUID | None = None
 
 
 class ChatMessageOut(BaseModel):
@@ -96,6 +97,20 @@ class ChatMessageOut(BaseModel):
     role: str
     content: str
     created_at: datetime
+    conversation_id: uuid.UUID | None = None
+
+
+class ChatConversationIn(BaseModel):
+    title: str = Field(default="New chat", max_length=120)
+
+
+class ChatConversationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    title: str
+    created_at: datetime
+    updated_at: datetime
 
 
 class DocumentRenameIn(BaseModel):

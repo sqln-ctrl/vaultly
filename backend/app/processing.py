@@ -84,6 +84,7 @@ def _cohere_request(messages: list[dict], response_format: dict | None = None) -
         "messages": messages,
         "stream": False,
         "temperature": 0.2,
+        "max_tokens": 300,
     }
     if response_format:
         payload["response_format"] = response_format
@@ -172,9 +173,11 @@ def answer_vault_question(documents: list[dict], question: str, history: list[di
         context_parts.append(f"[Document: {document['name']}]\n{text[:6000]}")
     context = "\n\n".join(context_parts)[:24000]
     system = (
-        "You answer questions across the user's entire document vault. Cite the document filename "
-        "when useful. Use only the supplied document context and clearly state when an answer is "
-        "not supported."
+        "Answer briefly in 1-3 short paragraphs and keep the response under 150 words. "
+        "Use only the supplied document context. If a document supports the answer, add a final "
+        "line exactly in this format: Sources: filename.pdf, filename2.pdf. Do not list documents "
+        "that were not used, and do not add a Sources line if no document supports the answer. "
+        "Never begin the answer with phrases such as 'According to this document' or 'Based on the document'."
     )
     messages = [{"role": "system", "content": system}]
     if context:
@@ -186,8 +189,14 @@ def answer_vault_question(documents: list[dict], question: str, history: list[di
     if result:
         return result
     if context:
+        source_names = [
+            document["name"]
+            for document in documents
+            if document.get("name")
+        ][:5]
+        source_line = f"\nSources: {', '.join(source_names)}" if source_names else ""
         return (
-            "The Cohere AI service is unavailable. I found the following context in your vault:\n\n"
-            + context[:3000]
+            "I could not generate a complete answer right now."
+            + source_line
         )
     return "Your vault has no readable document content yet."

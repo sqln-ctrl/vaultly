@@ -1,16 +1,31 @@
 import time
 from collections import defaultdict, deque
+from datetime import datetime, timedelta, timezone
 from threading import Lock
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
+from sqlalchemy import delete
 
 from .api import auth, documents
 from .config import settings
+from .db import SessionLocal
+from .models import VaultChatConversation, VaultChatMessage
 
 app = FastAPI(title="Vaultly API", version="0.1.0")
+
+
+@app.on_event("startup")
+def delete_expired_vault_chats():
+    cutoff = datetime.now(timezone.utc) - timedelta(days=15)
+    with SessionLocal() as db:
+        db.execute(delete(VaultChatMessage).where(VaultChatMessage.created_at < cutoff))
+        db.execute(
+            delete(VaultChatConversation).where(VaultChatConversation.updated_at < cutoff)
+        )
+        db.commit()
 
 
 class AuthRateLimitMiddleware(BaseHTTPMiddleware):
