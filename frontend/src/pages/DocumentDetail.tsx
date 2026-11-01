@@ -82,12 +82,6 @@ export default function DocumentDetail() {
         {!previewUrl && previewError && (
           <p role="alert" className="mt-4 text-sm text-danger">Preview unavailable: {previewError}</p>
         )}
-        {document.summary && (
-          <section className="mt-6">
-            <h2 className="text-sm font-medium">Summary</h2>
-            <p className="mt-2 text-sm leading-relaxed text-ink/70">{document.summary}</p>
-          </section>
-        )}
         <div className="mt-6 flex gap-3">
           <button className="btn" onClick={downloadDocument}>Download</button>
           <button className="rounded-md border border-danger px-4 py-2.5 text-danger" onClick={removeDocument}>Delete</button>
