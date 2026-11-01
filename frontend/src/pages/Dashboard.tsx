@@ -238,7 +238,20 @@ export default function Dashboard() {
                         <button type="button" className="min-w-0 flex-1 truncate px-2 py-2 text-left text-xs" onClick={() => openChat(chat.id)}>
                           {chat.title}
                         </button>
-                        <button type="button" className="px-2 text-xs text-danger opacity-60 hover:opacity-100" onClick={() => deleteChat(chat.id)} aria-label={`Delete ${chat.title}`}>×</button>
+                        <button
+                          type="button"
+                          className="p-2 text-danger opacity-60 hover:opacity-100"
+                          onClick={() => deleteChat(chat.id)}
+                          aria-label={`Delete ${chat.title}`}
+                          title="Delete chat"
+                        >
+                          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M3 6h18" />
+                            <path d="M8 6V4h8v2" />
+                            <path d="M19 6l-1 14H6L5 6" />
+                            <path d="M10 11v5M14 11v5" />
+                          </svg>
+                        </button>
                       </div>
                     ))}
                   </div>
