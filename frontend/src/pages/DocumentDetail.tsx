@@ -88,18 +88,6 @@ export default function DocumentDetail() {
             <p className="mt-2 text-sm leading-relaxed text-ink/70">{document.summary}</p>
           </section>
         )}
-        {document.fields && (
-          <section className="mt-6">
-            <h2 className="text-sm font-medium">Extracted fields</h2>
-            <dl className="mt-2 grid gap-3 text-sm sm:grid-cols-2">
-              <div><dt className="text-ink/60">Vendor</dt><dd>{document.fields.vendor || "Not found"}</dd></div>
-              <div><dt className="text-ink/60">Document number</dt><dd>{document.fields.doc_number || "Not found"}</dd></div>
-              <div><dt className="text-ink/60">Issue date</dt><dd>{document.fields.issue_date ? new Date(document.fields.issue_date).toLocaleDateString() : "Not found"}</dd></div>
-              <div><dt className="text-ink/60">Due date</dt><dd>{document.fields.due_date ? new Date(document.fields.due_date).toLocaleDateString() : "Not found"}</dd></div>
-              <div><dt className="text-ink/60">Total</dt><dd>{document.fields.total_amount != null ? `${document.fields.currency || ""}${document.fields.total_amount.toFixed(2)}` : "Not found"}</dd></div>
-            </dl>
-          </section>
-        )}
         <div className="mt-6 flex gap-3">
           <button className="btn" onClick={downloadDocument}>Download</button>
           <button className="rounded-md border border-danger px-4 py-2.5 text-danger" onClick={removeDocument}>Delete</button>
