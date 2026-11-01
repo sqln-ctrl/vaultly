@@ -9,6 +9,10 @@ import {
   type Usage,
 } from "../lib/api";
 
+function plainChatContent(content: string) {
+  return content.replace(/\*/g, "").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 export default function Dashboard() {
   const { user, logout } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -244,7 +248,7 @@ export default function Dashboard() {
                     {chatMessages.length === 0 && <p className="text-sm text-ink/60">Ask a question about your documents.</p>}
                     {chatMessages.map((message) => (
                       <p key={message.id} className={message.role === "user" ? "text-right text-sm" : "text-sm text-moss"}>
-                        <span className="inline-block max-w-[85%] whitespace-pre-wrap rounded-md bg-ink/5 px-3 py-2 text-left">{message.content}</span>
+                        <span className="inline-block max-w-[85%] whitespace-pre-wrap rounded-md bg-ink/5 px-3 py-2 text-left">{plainChatContent(message.content)}</span>
                       </p>
                     ))}
                   </div>

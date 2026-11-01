@@ -10,6 +10,12 @@ from .config import settings
 logger = logging.getLogger(__name__)
 
 
+def _plain_response(text: str) -> str:
+    text = text.replace("*", "")
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
 def extract_text(path: Path, mime_type: str) -> str:
     if mime_type == "application/pdf":
         import fitz
@@ -173,7 +179,9 @@ def answer_vault_question(documents: list[dict], question: str, history: list[di
         context_parts.append(f"[Document: {document['name']}]\n{text[:6000]}")
     context = "\n\n".join(context_parts)[:24000]
     system = (
-        "Answer briefly in 1-3 short paragraphs and keep the response under 150 words. "
+        "Answer directly and concisely in one short paragraph unless a list is necessary. "
+        "Keep the response under 100 words. Do not use asterisks, markdown bullets, bold text, "
+        "headings, or any other decorative formatting. "
         "Use only the supplied document context. If a document supports the answer, add a final "
         "line exactly in this format: Sources: filename.pdf, filename2.pdf. Do not list documents "
         "that were not used, and do not add a Sources line if no document supports the answer. "
@@ -187,7 +195,7 @@ def answer_vault_question(documents: list[dict], question: str, history: list[di
 
     result = _cohere_request(messages)
     if result:
-        return result
+        return _plain_response(result)
     if context:
         source_names = [
             document["name"]
